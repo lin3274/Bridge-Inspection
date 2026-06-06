@@ -6,8 +6,8 @@
 // @match        *://thbpbms.thb.gov.tw/*
 // @run-at       document-idle
 // @grant        none
-// @downloadURL  https://gist.github.com/lin3274/fedb56d6b7218ac4aa5efcf90557fd38/raw/橋梁系統自動填寫與計算經費_北分版.user.js
-// @updateURL    https://gist.github.com/lin3274/fedb56d6b7218ac4aa5efcf90557fd38/raw/橋梁系統自動填寫與計算經費_北分版.user.js
+// @downloadURL  https://gist.github.com/lin3274/Bridge-Inspection/raw/橋梁系統自動填寫與計算經費_北分版.user.js
+// @updateURL    https://gist.github.com/lin3274/Bridge-Inspection/raw/橋梁系統自動填寫與計算經費_北分版.user.js
 // @license     MIT
 // ==/UserScript==
 
