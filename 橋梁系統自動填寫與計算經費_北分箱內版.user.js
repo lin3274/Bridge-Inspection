@@ -6,15 +6,15 @@
 // @match        *://thbpbms.thb.gov.tw/*
 // @run-at       document-idle
 // @grant        none
-// @downloadURL  https://gist.github.com/lin3274/e5c8ee28dd176ba9e9a26f15f329f2c9/raw/橋梁系統自動填寫與計算經費_北分箱內版.user.js
-// @updateURL    https://gist.github.com/lin3274/e5c8ee28dd176ba9e9a26f15f329f2c9/raw/橋梁系統自動填寫與計算經費_北分箱內版.user.js
+// @downloadURL  https://gist.github.com/lin3274/Bridge-Inspection/raw/橋梁系統自動填寫與計算經費_北分箱內版.user.js
+// @updateURL    https://gist.github.com/lin3274/Bridge-Inspection/raw/橋梁系統自動填寫與計算經費_北分箱內版.user.js
 // @license     MIT
 // ==/UserScript==
 
 (function() {
     'use strict';
 
-    console.log('[橋梁外掛] ⏳ 腳本 v0.9 待命... 已新增構件選擇連動備註按鈕功能。');
+    console.log('[橋梁外掛] ⏳ 腳本 v0.9.3 待命... 已新增構件選擇連動備註按鈕功能。');
 
     // 🌟 選擇器更新：加入 COMP 欄位
     const SELECTORS = {
