@@ -14,7 +14,7 @@
 (function() {
     'use strict';
 
-    console.log('[橋梁外掛] ⏳ 腳本 v0.6 待命... 等待網頁核心載入完成...');
+    console.log('[橋梁外掛] ⏳ 腳本 v0.6.2 待命... 等待網頁核心載入完成...');
 
     const SELECTORS = {
         DEFECT: '#deterioration',
