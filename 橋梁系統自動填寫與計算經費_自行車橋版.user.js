@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         橋梁系統自動填寫與計算經費_自行車橋版
 // @namespace    http://tampermonkey.net/
-// @version      0.7.2
+// @version      0.7.5
 // @description  自動補齊名稱、填寫工法、並自動填入單價
 // @match        *://bms2.iot.gov.tw/*
 // @run-at       document-idle
@@ -14,7 +14,7 @@
 (function() {
     'use strict';
 
-    console.log('[橋梁外掛] ⏳ 腳本 v0.7.2 待命... 等待網頁核心載入完成...');
+    console.log('[橋梁外掛] ⏳ 腳本 v0.7.5 待命... 等待網頁核心載入完成...');
 
     // 🌟 修改點 1：移除數量與總價，改為單價(PRICE)
     const SELECTORS = {
