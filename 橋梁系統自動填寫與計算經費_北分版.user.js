@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         橋梁系統自動填寫與計算經費_北分版
 // @namespace    http://tampermonkey.net/
-// @version      0.6.2
+// @version      0.6.5
 // @description  
 // @match        *://thbpbms.thb.gov.tw/*
 // @run-at       document-idle
@@ -14,7 +14,7 @@
 (function() {
     'use strict';
 
-    console.log('[橋梁外掛] ⏳ 腳本 v0.6.2 待命... 等待網頁核心載入完成...');
+    console.log('[橋梁外掛] ⏳ 腳本 v0.6.5 待命... 等待網頁核心載入完成...');
 
     const SELECTORS = {
         DEFECT: '#deterioration',
