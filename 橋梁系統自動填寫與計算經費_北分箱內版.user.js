@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         橋梁系統自動填寫與計算經費_北分箱內版
 // @namespace    http://tampermonkey.net/
-// @version      0.9.3
+// @version      0.9.5
 // @description  自動更新規則、自動填寫單位、新增構件專屬備註快捷鍵
 // @match        *://thbpbms.thb.gov.tw/*
 // @run-at       document-idle
@@ -14,7 +14,7 @@
 (function() {
     'use strict';
 
-    console.log('[橋梁外掛] ⏳ 腳本 v0.9.3 待命... 已新增構件選擇連動備註按鈕功能。');
+    console.log('[橋梁外掛] ⏳ 腳本 v0.9.5 待命... 已新增構件選擇連動備註按鈕功能。');
 
     // 🌟 選擇器更新：加入 COMP 欄位
     const SELECTORS = {
