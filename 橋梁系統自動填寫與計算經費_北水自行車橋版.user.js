@@ -1,7 +1,7 @@
 // ==UserScript==
-// @name         橋梁系統自動填寫與計算經費_自行車橋版
+// @name         橋梁系統自動填寫與計算經費_北水自行車橋版
 // @namespace    http://tampermonkey.net/
-// @version      0.7.5
+// @version      0.7.6
 // @description  自動補齊名稱、填寫工法、並自動填入單價
 // @match        *://bms2.iot.gov.tw/*
 // @run-at       document-idle
@@ -14,7 +14,7 @@
 (function() {
     'use strict';
 
-    console.log('[橋梁外掛] ⏳ 腳本 v0.7.5 待命... 等待網頁核心載入完成...');
+    console.log('[橋梁外掛] ⏳ 腳本 v0.7.6 載入完成...');
 
     // 🌟 修改點 1：移除數量與總價，改為單價(PRICE)
     const SELECTORS = {
@@ -35,7 +35,8 @@
         { defect: '植物生長', groups: ['植物生長'], keyword: '植生', method: '植物清除', price: 1998 },
         { defect: '滲水、白華', groups: ['滲水', '白華'], keyword: '滲水白華', method: '滲水白華裂縫處理', price: 3780 },
         { defect: '滲水、白華', groups: ['滲水', '白華'], keyword: '白華', method: '白華處理', price: 3240 },
-        { defect: '混凝土表面水痕', groups: ['混凝土表面水痕'], keyword: '水痕', method: '持續觀察', price: 0 },
+        { defect: '混凝土表面水痕', groups: ['混凝土表面水痕','混凝土'], keyword: '混凝土水痕', method: '持續觀察', price: 0 },
+        { defect: '表面水痕', groups: ['鋼結構表面水痕','鋼構','鋼結構'], keyword: '鋼構水痕', method: '表面清洗', price: 216 },
         { defect: '雜物堆積', groups: ['雜物堆積'], keyword: '清雜(大)', method: '清除雜物', price: 2160 },
         { defect: '雜物堆積', groups: ['雜物堆積'], keyword: '清雜', method: '清除雜物', price: 540 },
         { defect: '模板未拆', groups: ['模板未拆'], keyword: '模板', method: '清除雜物', price: 540 },
@@ -48,6 +49,7 @@
         { defect: '防止落橋裝置損傷', groups: ['防落', '防落橋裝置損傷'], keyword: '防落損傷U≧3', method: '混凝土止震塊修復', price: 2700 },
         { defect: '防落墊老化', groups: ['防落墊', '防落墊老化'], keyword: '防落墊老化', method: '持續觀察', price: 0 },
         { defect: '塗裝劣化、生銹或腐蝕', groups: ['塗裝劣化', '生銹或腐蝕'], keyword: '塗劣', method: '鋼構除鏽及油漆塗裝', price: 540 },
+        { defect: '生銹或腐蝕', groups: ['生銹或腐蝕'], keyword: '防蝕保護', method: '金屬欄杆的防蝕保護', price: 540 },
 
     ];
 
