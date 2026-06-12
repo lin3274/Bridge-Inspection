@@ -7,6 +7,9 @@
 // @match        *://pbmis.nlma.gov.tw/*
 // @icon         data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==
 // @grant        none
+// @downloadURL  https://raw.githubusercontent.com/lin3274/Bridge-Inspection/refs/heads/main/人行橋系統填寫.user.js
+// @updateURL    https://raw.githubusercontent.com/lin3274/Bridge-Inspection/refs/heads/main/人行橋系統填寫.user.js
+// @license     MIT
 // ==/UserScript==
 console.log('🚀 [PBMIS] 腳本v3.9載入');
 (function() {
