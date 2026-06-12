@@ -120,32 +120,33 @@
         let amountEl = document.querySelector(SELECTORS.QTY);
         let methodEl = document.querySelector(SELECTORS.METHOD);
         let totalEl = document.querySelector(SELECTORS.COST);
-        let defectEl = document.querySelector(SELECTORS.DEFECT);
-
+        // 這裡不需要從下拉選單取劣化文字，因為計價主要看工法 (method) 欄位
+        
         if (!amountEl || !methodEl || !totalEl) return;
 
         let qty = parseFloat(amountEl.value);
         let methodText = methodEl.value;
-        let defectText = getElementTextValue(defectEl); // 改由主要下拉選單取得劣化文字
         let currentPrice = -1;
 
-        // 優先從方法名稱精確比對價格
-        let matchedRule = RULES.find(r => r.method === methodText || methodText.includes(r.method));
-
-        if (matchedRule) {
-            currentPrice = matchedRule.price;
+        // 1. 絕對優先：完全精確比對 (完全等於才算)
+        let exactMatchedRule = RULES.find(r => r.method === methodText);
+        
+        if (exactMatchedRule) {
+            currentPrice = exactMatchedRule.price;
         } else {
-            // 退回：模糊比對
+            // 2. 模糊比對：尋找包含的字串，但強制取「字串長度最長」的規則，避免子字串誤判
             let maxLen = 0;
             RULES.forEach(rule => {
                 let pureMethod = rule.method.replace(/\(.*\)/, '');
-                if ((methodText.includes(rule.method) || methodText === pureMethod) && rule.method.length > maxLen) {
+                // 檢查 methodText 是否包含規則字眼
+                if ((methodText.includes(rule.method) || methodText.includes(pureMethod)) && rule.method.length > maxLen) {
                     currentPrice = rule.price;
                     maxLen = rule.method.length;
                 }
             });
         }
 
+        // 3. 計算並填寫總價
         if (currentPrice >= 0 && !isNaN(qty)) {
             let totalCost = qty * currentPrice;
             if (parseFloat(totalEl.value) !== totalCost || totalEl.value === "") {
