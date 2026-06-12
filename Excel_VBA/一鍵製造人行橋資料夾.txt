@@ -1,0 +1,104 @@
+Option Explicit
+
+Sub CreateBridgeFoldersFixed()
+    Dim fso As Object
+    Dim rootPath As String
+    Dim ws As Worksheet
+    Dim i As Long, lastRow As Long
+    Dim sheetName As String, folderName As String
+    Dim comp As String, compCode As String, deter As String, dru As String, eVal As String, deru As String, qty As String, unit As String, idx As String
+    Dim wbName As String
+    Dim autoIdx As Integer ' 獨立的自動編號計數器
+    
+    ' 1. 選擇輸出的根目錄
+    With Application.FileDialog(msoFileDialogFolderPicker)
+        .Title = "請選擇資料夾產生的目標路徑"
+        If .Show = -1 Then
+            rootPath = .SelectedItems(1) & "\"
+        Else
+            Exit Sub
+        End If
+    End With
+    
+    Set fso = CreateObject("Scripting.FileSystemObject")
+    wbName = ActiveWorkbook.Name
+    
+    ' 2. 逐一處理當前打開的檔案中的所有工作表
+    For Each ws In ActiveWorkbook.Worksheets
+        ' 跳過空白頁與隱藏頁
+        If ws.Name <> "空白" And ws.Visible = xlSheetVisible Then
+            sheetName = CleanFolderName(ws.Name)
+            
+            autoIdx = 1 ' 每個工作表重新將自動編號設為 1
+            
+            ' 依照新表格尋找最後一行 (以 C 欄構件或 D 欄劣化為準)
+            lastRow = ws.Cells(ws.Rows.Count, "C").End(xlUp).Row
+            If ws.Cells(ws.Rows.Count, "D").End(xlUp).Row > lastRow Then
+                lastRow = ws.Cells(ws.Rows.Count, "D").End(xlUp).Row
+            End If
+            
+            ' 表頭佔用了第 1、2 列，資料從第 3 列開始讀取
+            For i = 3 To lastRow
+                comp = Trim(ws.Cells(i, "C").Value) ' C欄: 構件
+                deter = Trim(ws.Cells(i, "D").Value) ' D欄: 劣化樣態
+                
+                ' 【關鍵修正】只有當「構件」和「劣化樣態」都有填寫時，才視為有效資料（過濾空白列）
+                If comp <> "" And deter <> "" Then
+                    
+                    ' A. 處理項次 (若表格有數字則使用，否則使用流水號 autoIdx)
+                    idx = Trim(ws.Cells(i, "A").Value) ' A欄: 項次
+                    If idx = "" Or idx = "0" Or Not IsNumeric(idx) Then
+                        idx = autoIdx
+                    End If
+                    
+                    ' B. 處理構件編碼 (B欄)
+                    compCode = Trim(ws.Cells(i, "B").Value)
+                    
+                    ' C. 處理 DERU (D + E + RU) -> E欄為DRU, F欄為E
+                    dru = Trim(ws.Cells(i, "E").Value)
+                    eVal = Trim(ws.Cells(i, "F").Value)
+                    
+                    If Len(dru) = 3 Then
+                        deru = Left(dru, 1) & eVal & Mid(dru, 2)
+                    Else
+                        deru = eVal & dru ' 如果DRU本身不滿三位數時的防呆串接
+                    End If
+                    
+                    ' D. 處理數量與單位 -> G欄為數量, H欄為單位
+                    qty = Trim(ws.Cells(i, "G").Value)
+                    unit = Trim(ws.Cells(i, "H").Value)
+                    
+                    ' 建立第一層資料夾 (分頁名稱)，只在確定有資料時才建立
+                    If Not fso.FolderExists(rootPath & sheetName) Then
+                        fso.CreateFolder rootPath & sheetName
+                    End If
+                    
+                    ' 依照新規則組裝資料夾名稱: 項次.構件+構件編碼-劣化樣態-DERU-數量+單位
+                    folderName = idx & "." & comp & compCode & "-" & deter & "-" & deru & "-" & qty & unit
+                    folderName = CleanFolderName(folderName)
+                    
+                    ' 建立第二層資料夾
+                    On Error Resume Next ' 避免名稱重複或特殊字元導致中斷
+                    If Not fso.FolderExists(rootPath & sheetName & "\" & folderName) Then
+                        fso.CreateFolder rootPath & sheetName & "\" & folderName
+                    End If
+                    On Error GoTo 0
+                    
+                    ' 成功建立一筆資料夾後，自動編號計數器 +1
+                    autoIdx = autoIdx + 1
+                End If
+            Next i
+        End If
+    Next ws
+    
+    MsgBox "當前檔案 (" & wbName & ") 的新版資料夾轉換完成！", vbInformation
+End Sub
+
+' 清理資料夾不合法字元
+Function CleanFolderName(strIn As String) As String
+    Dim objRegExp As Object
+    Set objRegExp = CreateObject("VBScript.RegExp")
+    objRegExp.Global = True
+    objRegExp.Pattern = "[\\/:\*\?\""<>\|]"
+    CleanFolderName = objRegExp.Replace(strIn, "_")
+End Function

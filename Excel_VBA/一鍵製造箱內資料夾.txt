@@ -1,0 +1,144 @@
+Option Explicit
+
+Sub CreateBridgeFoldersDynamic()
+    Dim fso As Object
+    Dim rootPath As String
+    Dim ws As Worksheet
+    Dim i As Long, lastRow As Long
+    Dim sheetName As String, folderName As String
+    Dim comp As String, deter As String, dru As String, eVal As String, deru As String, qty As String, unit As String, idx As String
+    Dim wbName As String
+    
+    Dim headerRow As Long
+    Dim colIdx As Integer, colComp As Integer, colDeter As Integer, colDRU As Integer, colE As Integer, colQty As Integer, colUnit As Integer
+    Dim foundHeader As Boolean
+    Dim col As Integer
+    Dim autoIdx As Integer ' 新增：獨立的自動編號計數器
+    
+    ' 1. 選擇輸出的根目錄
+    With Application.FileDialog(msoFileDialogFolderPicker)
+        .Title = "請選擇資料夾產生的目標路徑"
+        If .Show = -1 Then
+            rootPath = .SelectedItems(1) & "\"
+        Else
+            Exit Sub
+        End If
+    End With
+    
+    Set fso = CreateObject("Scripting.FileSystemObject")
+    wbName = ActiveWorkbook.Name
+    
+    ' 2. 逐一處理當前打開的檔案中的所有工作表
+    For Each ws In ActiveWorkbook.Worksheets
+        ' 跳過空白頁與隱藏頁
+        If ws.Name <> "空白" And ws.Visible = xlSheetVisible Then
+            sheetName = CleanFolderName(ws.Name)
+            
+            ' 尋找表頭：掃描前 5 列，找到 "構件" 所在的列，就當作是標題列
+            foundHeader = False
+            For i = 1 To 5
+                For col = 1 To 15
+                    If Trim(ws.Cells(i, col).Value) = "構件" Then
+                        headerRow = i
+                        colComp = col
+                        foundHeader = True
+                        Exit For
+                    End If
+                Next col
+                If foundHeader Then Exit For
+            Next i
+            
+            ' 3. 如果找到表頭，動態確認其他欄位的位置
+            If foundHeader Then
+                colIdx = 0: colDeter = 0: colDRU = 0: colE = 0: colQty = 0: colUnit = 0
+                autoIdx = 1 ' 每個工作表重新將自動編號設為 1
+                
+                For col = 1 To 15
+                    Select Case Trim(ws.Cells(headerRow, col).Value)
+                        Case "項次", "編號"
+                            If colIdx = 0 Then colIdx = col ' 優先抓取
+                        Case "劣化樣態"
+                            colDeter = col
+                        Case "DRU"
+                            colDRU = col
+                        Case "E"
+                            colE = col
+                        Case "數量"
+                            colQty = col
+                        Case "單位"
+                            colUnit = col
+                    End Select
+                Next col
+                
+                ' 確保關鍵欄位都有找到才執行該頁
+                If colComp > 0 And colDeter > 0 And colDRU > 0 And colE > 0 Then
+                    
+                    ' 建立第一層資料夾 (分頁名稱)
+                    If Not fso.FolderExists(rootPath & sheetName) Then
+                        fso.CreateFolder rootPath & sheetName
+                    End If
+                    
+                    lastRow = ws.Cells(ws.Rows.Count, colComp).End(xlUp).Row
+                    
+                    ' 從表頭的下一列開始讀取資料
+                    For i = headerRow + 1 To lastRow
+                        comp = Trim(ws.Cells(i, colComp).Value)
+                        deter = Trim(ws.Cells(i, colDeter).Value)
+                        
+                        ' 只有當「構件」和「劣化」都有填寫時，才視為有效資料
+                        If comp <> "" And deter <> "" Then
+                            
+                            ' 處理項次 (若原本表格有數字則使用，否則使用自編號 autoIdx)
+                            If colIdx > 0 Then
+                                idx = Trim(ws.Cells(i, colIdx).Value)
+                            Else
+                                idx = ""
+                            End If
+                            
+                            If idx = "" Or idx = "0" Or Not IsNumeric(idx) Then
+                                idx = autoIdx
+                            End If
+                            
+                            ' 處理 DERU (D-E-RU)
+                            dru = Trim(ws.Cells(i, colDRU).Value)
+                            eVal = Trim(ws.Cells(i, colE).Value)
+                            If Len(dru) = 3 Then
+                                deru = Left(dru, 1) & eVal & Mid(dru, 2)
+                            Else
+                                deru = eVal & dru ' 防呆處理
+                            End If
+                            
+                            qty = Trim(ws.Cells(i, colQty).Value)
+                            unit = Trim(ws.Cells(i, colUnit).Value)
+                            
+                            ' 組裝資料夾名稱
+                            folderName = idx & "." & comp & "-" & deter & "-" & deru & "-" & qty & unit
+                            folderName = CleanFolderName(folderName)
+                            
+                            ' 建立第二層資料夾
+                            On Error Resume Next ' 避免名稱重複導致錯誤
+                            If Not fso.FolderExists(rootPath & sheetName & "\" & folderName) Then
+                                fso.CreateFolder rootPath & sheetName & "\" & folderName
+                            End If
+                            On Error GoTo 0
+                            
+                            ' 成功建立一筆資料夾後，自動編號 +1
+                            autoIdx = autoIdx + 1
+                        End If
+                    Next i
+                End If
+            End If
+        End If
+    Next ws
+    
+    MsgBox "當前檔案 (" & wbName & ") 的資料夾轉換完成！", vbInformation
+End Sub
+
+' 清理資料夾不合法字元
+Function CleanFolderName(strIn As String) As String
+    Dim objRegExp As Object
+    Set objRegExp = CreateObject("VBScript.RegExp")
+    objRegExp.Global = True
+    objRegExp.Pattern = "[\\/:\*\?\""<>\|]"
+    CleanFolderName = objRegExp.Replace(strIn, "_")
+End Function
