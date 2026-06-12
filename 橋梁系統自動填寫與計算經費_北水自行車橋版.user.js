@@ -6,8 +6,8 @@
 // @match        *://bms2.iot.gov.tw/*
 // @run-at       document-idle
 // @grant        none
-// @downloadURL  https://raw.githubusercontent.com/lin3274/Bridge-Inspection/refs/heads/main/橋梁系統自動填寫與計算經費_自行車橋版.user.js
-// @updateURL    https://raw.githubusercontent.com/lin3274/Bridge-Inspection/refs/heads/main/橋梁系統自動填寫與計算經費_自行車橋版.user.js
+// @downloadURL  https://raw.githubusercontent.com/lin3274/Bridge-Inspection/refs/heads/main/橋梁系統自動填寫與計算經費_北水自行車橋版.user.js
+// @updateURL    https://raw.githubusercontent.com/lin3274/Bridge-Inspection/refs/heads/main/橋梁系統自動填寫與計算經費_北水自行車橋版.user.js
 // @license     MIT
 // ==/UserScript==
 
