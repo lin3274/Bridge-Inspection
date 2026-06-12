@@ -1,14 +1,14 @@
 // ==UserScript==
 // @name         人行橋系統填寫
 // @namespace    http://tampermonkey.net/
-// @version      3.8
+// @version      3.9
 // @description  自動抓取 PBMIS 系統欄位並反填。純 ID 抓取、防呆比對、U值連動、跨頁面智慧日期記憶。
 // @author       You
 // @match        *://pbmis.nlma.gov.tw/*
 // @icon         data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==
 // @grant        none
 // ==/UserScript==
-console.log('🚀 [PBMIS] 腳本開始載入 (v3.8 跨頁面日期記憶版)...');
+console.log('🚀 [PBMIS] 腳本v3.9載入');
 (function() {
     'use strict';
 
@@ -34,12 +34,28 @@ console.log('🚀 [PBMIS] 腳本開始載入 (v3.8 跨頁面日期記憶版)...'
         '河道', '排水', '照明', '雨遮', '鋪面', '橋塔', '鋼纜', '吊索', '拱肋', '拱圈'
     ];
 
+    // 特殊劣化類型白名單 (映射字典)
+    // 格式：'觸發關鍵字': '強制對應的選單項目文字'
+    const DEFECT_TYPE_WHITELIST = {
+        '非結構性裂縫': '其他',
+        '材料、乾縮裂縫等': '其他'
+        // 你可以繼續在這裡新增，例如：
+        // '鳥糞': '其他',
+        // '不明污漬': '表面污染'
+    };
+
     const delay = (ms) => new Promise(res => setTimeout(res, ms));
 
-    // 字串清理器 (去除所有空白與轉小寫)
+// 1. 增強版字串清理器：無視全半形、括號、斜線與異體字
     function normalizeText(text) {
         if (!text) return '';
-        return text.replace(/[\s ]+/g, '').toLowerCase();
+        return text
+            .toLowerCase()                     // 轉小寫
+            .replace(/[\s]+/g, '')             // 去除所有空白
+            .replace(/[（）()【】\[\]]/g, '')    // 移除所有種類的括號
+            .replace(/樑/g, '梁')              // 統一異體字：樑 -> 梁
+            .replace(/臺/g, '台')              // 統一異體字：臺 -> 台
+            .replace(/[、/\\_,-]/g, '');       // 移除斜線、頓號等干擾符號
     }
 
     function getSelectText(selector) {
@@ -60,6 +76,7 @@ console.log('🚀 [PBMIS] 腳本開始載入 (v3.8 跨頁面日期記憶版)...'
         el.dispatchEvent(new Event('change', { bubbles: true }));
     }
 
+// 2. 雙向包含最佳權重比對演算法
     function setSelectByText(selector, textToMatch) {
         const el = document.querySelector(selector);
         if (!el || !textToMatch) {
@@ -68,18 +85,39 @@ console.log('🚀 [PBMIS] 腳本開始載入 (v3.8 跨頁面日期記憶版)...'
         }
 
         const normalizedTarget = normalizeText(textToMatch);
+        let bestIndex = -1;
+        let maxLength = 0;
 
         for (let i = 0; i < el.options.length; i++) {
             const normalizedOption = normalizeText(el.options[i].text);
+            if (!normalizedOption) continue;
 
-            if (normalizedOption.includes(normalizedTarget)) {
-                el.selectedIndex = i;
-                el.dispatchEvent(new Event('change', { bubbles: true }));
-                if (window.jQuery && window.jQuery(el).hasClass('selectpicker')) {
-                    window.jQuery(el).selectpicker('refresh');
-                }
+            // 1. 完全相等：最高優先級，直接採用
+            if (normalizedTarget === normalizedOption) {
+                bestIndex = i;
                 break;
             }
+
+            // 2. 雙向包含：目標包含選項 或 選項包含目標
+            if (normalizedTarget.includes(normalizedOption) || normalizedOption.includes(normalizedTarget)) {
+                // 權重機制：選擇字串最長的選項
+                if (normalizedOption.length > maxLength) {
+                    maxLength = normalizedOption.length;
+                    bestIndex = i;
+                }
+            }
+        }
+
+        // 執行選取與連動更新
+        if (bestIndex !== -1) {
+            el.selectedIndex = bestIndex;
+            el.dispatchEvent(new Event('change', { bubbles: true }));
+            if (window.jQuery && window.jQuery(el).hasClass('selectpicker')) {
+                window.jQuery(el).selectpicker('refresh');
+            }
+            console.log(`🎯 [PBMIS] 成功匹配下拉選單：${el.options[bestIndex].text}`);
+        } else {
+            console.warn(`⚠️ [PBMIS] 無法在選單中找到任何相符的項目: ${textToMatch}`);
         }
     }
 
@@ -118,8 +156,8 @@ console.log('🚀 [PBMIS] 腳本開始載入 (v3.8 跨頁面日期記憶版)...'
         return Array.from(expanded).filter(Boolean);
     }
 
-    // =====================================================================
-    // 第二階段：動態生成「劣化類型」快捷按鈕
+// =====================================================================
+    // 第二階段：動態生成「劣化類型」快捷按鈕 (加入白名單機制)
     // =====================================================================
     async function injectDefectTypeButtons(targetDefectTypeStr, targetDeru = null) {
         const container = document.getElementById('pbmis-helper-btns');
@@ -134,17 +172,43 @@ console.log('🚀 [PBMIS] 腳本開始載入 (v3.8 跨頁面日期記憶版)...'
             return;
         }
 
-        let keywords = getExpandedKeywords(targetDefectTypeStr);
-        let filteredOptions = validOptions.filter(opt =>
-            keywords.some(kw => normalizeText(opt.text).includes(normalizeText(kw)) || normalizeText(kw).includes(normalizeText(opt.text)))
-        );
+        let filteredOptions = [];
+        let isWhitelistTriggered = false;
+        let overrideOptionText = '';
+
+        // 🌟 1. 優先檢查白名單
+        for (const [key, targetOption] of Object.entries(DEFECT_TYPE_WHITELIST)) {
+            if (targetDefectTypeStr.includes(key)) {
+                isWhitelistTriggered = true;
+                overrideOptionText = targetOption;
+                break; // 命中一個就跳出
+            }
+        }
+
+        // 🌟 2. 決定過濾邏輯
+        if (isWhitelistTriggered) {
+            // 如果命中白名單，強制只抓取指定的選項 (例如「其他」)
+            filteredOptions = validOptions.filter(opt =>
+                normalizeText(opt.text).includes(normalizeText(overrideOptionText))
+            );
+            container.innerHTML = filteredOptions.length > 0
+                ? `<span style="color: #6f42c1; font-weight: bold;">🌟 觸發白名單 (${targetDefectTypeStr} ➡️ ${overrideOptionText})：</span>`
+                : `<span style="color: #d9534f; font-weight: bold;">⚠️ 白名單指定為「${overrideOptionText}」，但選單中找不到該項目！</span>`;
+        } else {
+            // 原本的模糊比對邏輯
+            let keywords = getExpandedKeywords(targetDefectTypeStr);
+            filteredOptions = validOptions.filter(opt =>
+                keywords.some(kw => normalizeText(opt.text).includes(normalizeText(kw)) || normalizeText(kw).includes(normalizeText(opt.text)))
+            );
+
+            container.innerHTML = filteredOptions.length > 0
+                ? `<span style="color: #007bff; font-weight: bold;">🎯 已為您篩選相關類型 (${targetDefectTypeStr})：</span>`
+                : `<span style="color: #d9534f; font-weight: bold;">👉 未找到完全匹配的類型，請手動選擇：</span>`;
+        }
 
         let displayOptions = filteredOptions.length > 0 ? filteredOptions : validOptions;
 
-        container.innerHTML = filteredOptions.length > 0
-            ? `<span style="color: #007bff; font-weight: bold;">🎯 已為您篩選相關類型 (${targetDefectTypeStr})：</span>`
-            : `<span style="color: #d9534f; font-weight: bold;">👉 未找到完全匹配的類型，請手動選擇：</span>`;
-
+        // 🌟 3. 生成按鈕
         displayOptions.forEach(opt => {
             const btn = document.createElement('button');
             btn.innerText = opt.text;
@@ -152,8 +216,15 @@ console.log('🚀 [PBMIS] 腳本開始載入 (v3.8 跨頁面日期記憶版)...'
                 padding: 6px 12px; font-size: 13px; background-color: #6c757d;
                 color: white; border: none; border-radius: 4px; cursor: pointer; transition: 0.2s;
             `;
-            btn.onmouseover = () => btn.style.backgroundColor = '#5a6268';
-            btn.onmouseout = () => btn.style.backgroundColor = '#6c757d';
+            // 若為白名單強制選項，按鈕換成紫色系凸顯
+            if (isWhitelistTriggered && filteredOptions.includes(opt)) {
+                btn.style.backgroundColor = '#6f42c1';
+                btn.onmouseover = () => btn.style.backgroundColor = '#59339d';
+                btn.onmouseout = () => btn.style.backgroundColor = '#6f42c1';
+            } else {
+                btn.onmouseover = () => btn.style.backgroundColor = '#5a6268';
+                btn.onmouseout = () => btn.style.backgroundColor = '#6c757d';
+            }
 
             btn.onclick = async (e) => {
                 e.preventDefault();
@@ -169,21 +240,39 @@ console.log('🚀 [PBMIS] 腳本開始載入 (v3.8 跨頁面日期記憶版)...'
                 setSelectByText(CONFIG.defectType, opt.text);
 
                 if (targetDeru && targetDeru.length >= 4) {
-                    const uValue = targetDeru[3];
+                    const uValueStr = targetDeru[3];
+                    const uValueNum = parseInt(uValueStr, 10);
                     let targetStatus = '';
 
-                    if (uValue === '1') targetStatus = '輕微';
-                    else if (uValue === '2') targetStatus = '明顯';
-                    else if (uValue === '3') targetStatus = '嚴重';
-                    else if (uValue === '4') targetStatus = '極嚴重';
+                    // 🔍 判斷目前選擇的「劣化類型」是否為「其他」
+                    const isOtherType = opt.text.includes('其他損傷');
 
+                    if (isOtherType) {
+                        // 🌟 狀況 A：劣化類型為「其他」 (新邏輯)
+                        if (!isNaN(uValueNum)) {
+                            if (uValueNum <= 2) {
+                                targetStatus = '不影響橋上行人及橋下人車安全的損傷劣化';
+                            } else {
+                                targetStatus = '影響橋上行人及橋下人車安全或造成使用障礙';
+                            }
+                        }
+                    } else {
+                        // 🌟 狀況 B：一般劣化類型 (舊邏輯)
+                        if (uValueStr === '1') targetStatus = '輕微';
+                        else if (uValueStr === '2') targetStatus = '明顯';
+                        else if (uValueStr === '3') targetStatus = '嚴重';
+                        else if (uValueStr === '4') targetStatus = '極嚴重';
+                    }
+
+                    // 執行下拉選單等待與連動
                     if (targetStatus) {
-                        container.innerHTML = `<span style="color: #17a2b8; font-weight: bold;">⏳ 載入劣化狀況中... (U=${uValue} 對應: ${targetStatus})</span>`;
+                        const typeLabel = isOtherType ? '其他項目' : '一般項目';
+                        container.innerHTML = `<span style="color: #17a2b8; font-weight: bold;">⏳ 載入劣化狀況中... (${typeLabel}, U=${uValueStr})</span>`;
 
                         await waitForOptions(CONFIG.defectstatus, 5000);
 
                         setSelectByText(CONFIG.defectstatus, targetStatus);
-                        console.log(`✅ [PBMIS] 已根據 U=${uValue} 選擇劣化狀況: ${targetStatus}`);
+                        console.log(`✅ [PBMIS] 已根據 U=${uValueStr} (${typeLabel}) 選擇劣化狀況: ${targetStatus}`);
                     }
 
                     console.log(`🔢 [PBMIS] 準備填入 DERU: ${targetDeru}`);
