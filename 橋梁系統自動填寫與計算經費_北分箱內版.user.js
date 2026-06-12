@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         橋梁系統自動填寫與計算經費_北分箱內版
 // @namespace    http://tampermonkey.net/
-// @version      0.9.5
+// @version      0.9.6
 // @description  自動更新規則、自動填寫單位、新增構件專屬備註快捷鍵
 // @match        *://thbpbms.thb.gov.tw/*
 // @run-at       document-idle
@@ -14,18 +14,18 @@
 (function() {
     'use strict';
 
-    console.log('[橋梁外掛] ⏳ 腳本 v0.9.5 待命... 已新增構件選擇連動備註按鈕功能。');
+    console.log('[橋梁外掛] ⏳ 腳本 v0.9.6 已載入。');
 
-    // 🌟 選擇器更新：加入 COMP 欄位
+    // 🌟 選擇器常數化
     const SELECTORS = {
-        COMP: '#boxinsp_comp', // 構件欄位
-        DEFECT: '#deterioration',
-        DEFECT_TEXT: '#deterioration_text',
-        METHOD: '#method',
-        REMARK: '#remark',
-        QTY: '#amount',
-        UNIT: '#unit',
-        COST: '#total'
+        COMP: '#boxinsp_comp', // 構件欄位 (Select)
+        DEFECT: '#deterioration', // 劣化類型 (Select)
+        DEFECT_TEXT: '#deterioration_text', // 假設存在的劣化文字欄位 (Input)
+        METHOD: '#method', // 維修工法 (Input)
+        REMARK: '#remark', // 備註 (Textarea)
+        QTY: '#amount', // 數量 (Input)
+        UNIT: '#unit', // 單位 (Select)
+        COST: '#total' // 經費 (Input)
     };
 
     const RULES = [
@@ -47,98 +47,42 @@
         { defect: '螺栓損傷、欠缺及鬆動', groups: ['螺栓損傷、欠缺及鬆動', '螺栓'], keyword: '螺栓', method: '螺栓補鎖', price: 200, autoRemark: '', unit: '個' }
     ];
 
-    const KEYWORD_MAP = [];
+    // 建立關鍵字索引字典 (Set 去重)
+    const KEYWORD_MAP = new Map();
     RULES.forEach(r => {
-        KEYWORD_MAP.push({ searchStr: r.defect, defectName: r.defect });
-        KEYWORD_MAP.push({ searchStr: r.keyword, defectName: r.defect });
-        r.groups.forEach(g => {
-            KEYWORD_MAP.push({ searchStr: g, defectName: r.defect });
-        });
+        KEYWORD_MAP.set(r.defect, r.defect);
+        KEYWORD_MAP.set(r.keyword, r.defect);
+        r.groups.forEach(g => KEYWORD_MAP.set(g, r.defect));
     });
 
-    const uniqueMap = new Map();
-    KEYWORD_MAP.forEach(item => {
-        if (!uniqueMap.has(item.searchStr)) uniqueMap.set(item.searchStr, item.defectName);
-    });
-    const ALL_KEYWORDS = [];
-    uniqueMap.forEach((defectName, searchStr) => ALL_KEYWORDS.push({ searchStr, defectName }));
-    ALL_KEYWORDS.sort((a, b) => b.searchStr.length - a.searchStr.length);
+    // 依長度排序，確保優先比對長字串 (例如 "模板(大)" 優先於 "模板")
+    const ALL_KEYWORDS = Array.from(KEYWORD_MAP.entries())
+        .map(([searchStr, defectName]) => ({ searchStr, defectName }))
+        .sort((a, b) => b.searchStr.length - a.searchStr.length);
 
     let inputTimeout = null;
     let isUpdating = false;
-    let lastKnownValues = { COMP: null, DEFECT: null, DEFECT_TEXT: null, REMARK: null };
 
-    function isTargetField(el) {
-        if (!el || typeof el.matches !== 'function') return false;
-        return el.matches(SELECTORS.COMP) || el.matches(SELECTORS.DEFECT) ||
-               el.matches(SELECTORS.DEFECT_TEXT) || el.matches(SELECTORS.METHOD) ||
-               el.matches(SELECTORS.REMARK) || el.matches(SELECTORS.QTY);
+    // 取得選單或輸入框的真實文字值
+    function getElementTextValue(el) {
+        if (!el) return "";
+        return el.tagName === 'SELECT' ? (el.selectedIndex >= 0 ? el.options[el.selectedIndex].text : '') : el.value;
     }
 
-    function initScript() {
-        function handleEvent(e) {
-            if (isUpdating) return;
-            if (!isTargetField(e.target)) return;
-            clearTimeout(inputTimeout);
-            inputTimeout = setTimeout(() => processAllLogic(e.target), 300);
-        }
-
-        document.body.addEventListener('input', handleEvent);
-        document.body.addEventListener('change', handleEvent);
-        setInterval(autoScanner, 800);
-    }
-
-    function autoScanner() {
-        if (isUpdating) return;
-
-        let compEl = document.querySelector(SELECTORS.COMP);
-        let defectEl = document.querySelector(SELECTORS.DEFECT);
-        let defectTextEl = document.querySelector(SELECTORS.DEFECT_TEXT);
-        let remarkEl = document.querySelector(SELECTORS.REMARK);
-
-        // 🌟 新增：監聽構件欄位變化
-        if (compEl) {
-            let text = compEl.tagName === 'SELECT' ? (compEl.selectedIndex >= 0 ? compEl.options[compEl.selectedIndex].text : '') : compEl.value;
-            if (text !== lastKnownValues.COMP) {
-                lastKnownValues.COMP = text;
-                updateCompButtons(text);
-            }
-        }
-
-        if (defectEl) {
-            let text = defectEl.tagName === 'SELECT' ? (defectEl.selectedIndex >= 0 ? defectEl.options[defectEl.selectedIndex].text : '') : defectEl.value;
-            if (text !== lastKnownValues.DEFECT) { if (text) processAllLogic(defectEl); }
-        }
-        if (defectTextEl) {
-            let text = defectTextEl.value;
-            if (text !== lastKnownValues.DEFECT_TEXT) { if (text) processAllLogic(defectTextEl); }
-        }
-        if (remarkEl) {
-            let text = remarkEl.value;
-            if (text !== lastKnownValues.REMARK) { if (text) processAllLogic(remarkEl); }
-        }
-    }
-
-    // 🌟 新增：產生構件專屬快捷按鈕的功能
+    // 更新構件專屬按鈕
     function updateCompButtons(compText) {
         let remarkEl = document.querySelector(SELECTORS.REMARK);
         if (!remarkEl) return;
 
-        // 移除舊的按鈕容器
         let oldContainer = document.querySelector('.tm-comp-btn-container');
         if (oldContainer) oldContainer.remove();
 
         let btns = [];
-        // 判斷選定的構件並產生對應按鈕
-        if (compText.includes('端隔梁')) {
-            btns = ['劣化構件:橋尾側端隔梁', '劣化構件:橋頭側端隔梁'];
-        } else if (compText.includes('隔板(橫隔梁)')) {
-            btns = ['劣化構件:橋尾側隔板', '劣化構件:橋頭側隔板'];
-        } else if (compText.includes('其他')) {
-            btns = ['劣化構件:支承剪力裝置'];
-        }
+        if (compText.includes('端隔梁')) btns = ['劣化構件:橋尾側端隔梁', '劣化構件:橋頭側端隔梁'];
+        else if (compText.includes('隔板(橫隔梁)')) btns = ['劣化構件:橋尾側隔板', '劣化構件:橋頭側隔板'];
+        else if (compText.includes('其他')) btns = ['劣化構件:支承剪力裝置'];
 
-        if (btns.length === 0) return; // 如果不是指定構件，就不產生按鈕
+        if (btns.length === 0) return;
 
         let btnContainer = document.createElement('div');
         btnContainer.className = 'tm-comp-btn-container';
@@ -148,233 +92,72 @@
             let btn = document.createElement('button');
             btn.textContent = btnText;
             btn.style.cssText = 'margin-right: 8px; padding: 4px 10px; cursor: pointer; font-size: 13px; background: #17a2b8; color: white; border: none; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.2); transition: 0.2s;';
-
-            btn.onmouseover = () => { btn.style.background = '#138496'; };
-            btn.onmouseout = () => { btn.style.background = '#17a2b8'; };
+            btn.onmouseover = () => btn.style.background = '#138496';
+            btn.onmouseout = () => btn.style.background = '#17a2b8';
 
             btn.onclick = (e) => {
                 e.preventDefault();
-                let currentRemark = remarkEl.value;
+                if (isUpdating) return;
+                isUpdating = true;
 
-                // 貼心設計：先清除同一組的其他方向備註，避免重複疊加 (如: 同時出現橋頭側跟橋尾側)
+                let currentRemark = remarkEl.value;
                 btns.forEach(b => {
                     currentRemark = currentRemark.replace(b, '').replace(/^\s*[\r\n]/gm, '').trim();
                 });
 
-                // 將選取的字眼塞入備註的最前方
                 remarkEl.value = currentRemark ? btnText + '\n' + currentRemark : btnText;
                 remarkEl.dispatchEvent(new Event('change', { bubbles: true }));
-                lastKnownValues.REMARK = remarkEl.value;
+                setTimeout(() => { isUpdating = false; }, 50);
             };
             btnContainer.appendChild(btn);
         });
 
-        // 將按鈕掛載在備註欄位正上方或正下方 (此處掛在正下方)
         remarkEl.parentNode.insertBefore(btnContainer, remarkEl.nextSibling);
     }
 
+    // 計算總價
     function calculateCost() {
         let amountEl = document.querySelector(SELECTORS.QTY);
         let methodEl = document.querySelector(SELECTORS.METHOD);
         let totalEl = document.querySelector(SELECTORS.COST);
-        let dtEl = document.querySelector(SELECTORS.DEFECT_TEXT);
+        let defectEl = document.querySelector(SELECTORS.DEFECT);
 
-        if (amountEl && methodEl && totalEl) {
-            let qty = parseFloat(amountEl.value);
-            let methodText = methodEl.value;
-            let defectText = dtEl ? dtEl.value : "";
-            let currentPrice = -1;
-            let activeRules = [];
-            let maxScore = 0;
+        if (!amountEl || !methodEl || !totalEl) return;
 
-            if (defectText) {
-                RULES.forEach(rule => {
-                    let score = 0;
-                    if (defectText.includes(rule.defect)) score = Math.max(score, rule.defect.length);
-                    if (defectText.includes(rule.keyword)) score = Math.max(score, rule.keyword.length);
-                    rule.groups.forEach(g => {
-                        if (defectText.includes(g)) score = Math.max(score, g.length);
-                    });
+        let qty = parseFloat(amountEl.value);
+        let methodText = methodEl.value;
+        let defectText = getElementTextValue(defectEl); // 改由主要下拉選單取得劣化文字
+        let currentPrice = -1;
 
-                    if (score > 0) {
-                        if (score > maxScore) {
-                            maxScore = score;
-                            activeRules = [rule];
-                        } else if (score === maxScore) {
-                            activeRules.push(rule);
-                        }
-                    }
-                });
-            }
+        // 優先從方法名稱精確比對價格
+        let matchedRule = RULES.find(r => r.method === methodText || methodText.includes(r.method));
 
-            let targetRule = null;
-            if (activeRules.length > 0) {
-                targetRule = activeRules.find(r =>
-                    r.method === methodText ||
-                    r.method.includes(methodText) ||
-                    methodText.includes(r.method)
-                );
-            }
-
-            if (targetRule) {
-                currentPrice = targetRule.price;
-            } else {
-                let maxLen = 0;
-                for (const rule of RULES) {
-                    let pureMethod = rule.method.replace(/\(.*\)/, '');
-                    if ((methodText === rule.method || methodText.includes(rule.method) || methodText === pureMethod) && rule.method.length > maxLen) {
-                        currentPrice = rule.price;
-                        maxLen = rule.method.length;
-                    }
+        if (matchedRule) {
+            currentPrice = matchedRule.price;
+        } else {
+            // 退回：模糊比對
+            let maxLen = 0;
+            RULES.forEach(rule => {
+                let pureMethod = rule.method.replace(/\(.*\)/, '');
+                if ((methodText.includes(rule.method) || methodText === pureMethod) && rule.method.length > maxLen) {
+                    currentPrice = rule.price;
+                    maxLen = rule.method.length;
                 }
-            }
+            });
+        }
 
-            if (currentPrice >= 0 && !isNaN(qty)) {
-                let totalCost = qty * currentPrice;
-                if (parseFloat(totalEl.value) !== totalCost || totalEl.value === "") {
-                    totalEl.value = totalCost;
-                    totalEl.dispatchEvent(new Event('change', { bubbles: true }));
-                }
+        if (currentPrice >= 0 && !isNaN(qty)) {
+            let totalCost = qty * currentPrice;
+            if (parseFloat(totalEl.value) !== totalCost || totalEl.value === "") {
+                totalEl.value = totalCost;
+                totalEl.dispatchEvent(new Event('change', { bubbles: true }));
             }
         }
     }
 
-    function processAllLogic(targetEl) {
-        isUpdating = true;
-
-        try {
-            // 同步構件欄位狀態
-            let compEl = document.querySelector(SELECTORS.COMP);
-            if (compEl) {
-                let compText = compEl.tagName === 'SELECT' ? (compEl.selectedIndex >= 0 ? compEl.options[compEl.selectedIndex].text : '') : compEl.value;
-                if (compText !== lastKnownValues.COMP) {
-                    lastKnownValues.COMP = compText;
-                    updateCompButtons(compText);
-                }
-            }
-
-            let dEl = document.querySelector(SELECTORS.DEFECT);
-            if (dEl) lastKnownValues.DEFECT = dEl.tagName === 'SELECT' ? (dEl.selectedIndex >= 0 ? dEl.options[dEl.selectedIndex].text : '') : dEl.value;
-            let dtEl = document.querySelector(SELECTORS.DEFECT_TEXT);
-            if (dtEl) lastKnownValues.DEFECT_TEXT = dtEl.value;
-            let rEl = document.querySelector(SELECTORS.REMARK);
-            if (rEl) lastKnownValues.REMARK = rEl.value;
-
-            let remarkEl = document.querySelector(SELECTORS.REMARK);
-            let defectTextEl = document.querySelector(SELECTORS.DEFECT_TEXT);
-
-            if (remarkEl && defectTextEl) {
-                let remarkText = remarkEl.value;
-                if (remarkText) {
-                    let matchedItem = null;
-
-                    let tempRemarkForSearch = remarkText;
-                    let activeAutoRemarks = RULES.map(r => r.autoRemark).filter(r => r);
-                    activeAutoRemarks.forEach(ar => {
-                        if(tempRemarkForSearch.includes(ar)) {
-                            tempRemarkForSearch = tempRemarkForSearch.replace(ar, '');
-                        }
-                    });
-
-                    for (const kw of ALL_KEYWORDS) {
-                        if (tempRemarkForSearch.includes(kw.searchStr)) {
-                            matchedItem = kw;
-                            break;
-                        }
-                    }
-
-                    if (matchedItem) {
-                        let newRemarkStr = remarkText.replace(matchedItem.searchStr, '').trim();
-                        if (newRemarkStr.startsWith('\n')) newRemarkStr = newRemarkStr.substring(1).trim();
-
-                        remarkEl.value = newRemarkStr;
-                        remarkEl.dispatchEvent(new Event('change', { bubbles: true }));
-                        lastKnownValues.REMARK = remarkEl.value;
-
-                        defectTextEl.value = matchedItem.defectName;
-                        defectTextEl.dispatchEvent(new Event('change', { bubbles: true }));
-                        lastKnownValues.DEFECT_TEXT = matchedItem.defectName;
-
-                        targetEl = defectTextEl;
-                    }
-                }
-            }
-
-            if (targetEl.matches(SELECTORS.DEFECT) || targetEl.matches(SELECTORS.DEFECT_TEXT)) {
-                let text = targetEl.tagName === 'SELECT' ?
-                           targetEl.options[targetEl.selectedIndex]?.text :
-                           targetEl.value;
-
-                if (text) {
-                    let scoredRules = [];
-                    let maxScore = 0;
-
-                    RULES.forEach(rule => {
-                        let score = 0;
-                        if (text.includes(rule.defect)) score = Math.max(score, rule.defect.length);
-                        if (text.includes(rule.keyword)) score = Math.max(score, rule.keyword.length);
-                        rule.groups.forEach(g => {
-                            if (text.includes(g)) score = Math.max(score, g.length);
-                        });
-
-                        if (score > 0) {
-                            scoredRules.push({ rule, score });
-                            maxScore = Math.max(maxScore, score);
-                        }
-                    });
-
-                    let matchedRules = [];
-                    scoredRules.filter(sr => sr.score === maxScore).forEach(sr => {
-                        if (!matchedRules.some(r => r.method === sr.rule.method)) {
-                            matchedRules.push(sr.rule);
-                        }
-                    });
-
-                    let methodEl = document.querySelector(SELECTORS.METHOD);
-                    if (methodEl) {
-                        if (matchedRules.length === 0) {
-                            let oldContainer = document.querySelector('.tm-btn-container');
-                            if (oldContainer) oldContainer.remove();
-                        } else if (matchedRules.length === 1) {
-                            let oldContainer = document.querySelector('.tm-btn-container');
-                            if (oldContainer) oldContainer.remove();
-                            fillMethod(methodEl, matchedRules[0]);
-                        } else {
-                            createShortcutButtons(methodEl, matchedRules);
-                        }
-                    }
-                }
-            }
-
-            if (targetEl.matches(SELECTORS.METHOD)) {
-                let methodText = targetEl.value;
-                if (methodText) {
-                    let targetRule = null;
-                    let maxKwLen = 0;
-                    RULES.forEach(rule => {
-                        if (methodText.includes(rule.keyword) && rule.keyword.length > maxKwLen) {
-                            targetRule = rule;
-                            maxKwLen = rule.keyword.length;
-                        }
-                    });
-
-                    if (targetRule && methodText !== targetRule.method) {
-                        fillMethod(targetEl, targetRule);
-                        let oldContainer = document.querySelector('.tm-btn-container');
-                        if (oldContainer) oldContainer.remove();
-                    }
-                }
-            }
-
-            calculateCost();
-
-        } finally {
-            setTimeout(() => { isUpdating = false; }, 100);
-        }
-    }
-
-    function createShortcutButtons(targetInput, rules) {
-        let ruleKeys = rules.map(r => r.keyword).join('|');
+    // 處理工法快捷鍵按鈕
+    function createShortcutButtons(targetInput, matchedRules) {
+        let ruleKeys = matchedRules.map(r => r.keyword).join('|');
         let oldContainer = document.querySelector('.tm-btn-container');
 
         if (oldContainer) {
@@ -387,12 +170,11 @@
         btnContainer.dataset.rules = ruleKeys;
         btnContainer.style.marginLeft = '10px';
 
-        rules.forEach(rule => {
+        matchedRules.forEach(rule => {
             let btn = document.createElement('button');
             btn.textContent = rule.keyword;
             btn.title = rule.method;
             btn.style.cssText = 'margin-right: 5px; padding: 3px 8px; cursor: pointer; font-size: 13px; background: #007BFF; color: white; border: none; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.2); transition: 0.2s;';
-
             btn.onmouseover = () => { if (btn.style.background !== 'rgb(40, 167, 69)') btn.style.background = '#0056b3'; };
             btn.onmouseout = () => { if (btn.style.background !== 'rgb(40, 167, 69)') btn.style.background = '#007BFF'; };
 
@@ -408,23 +190,41 @@
         targetInput.parentNode.insertBefore(btnContainer, targetInput.nextSibling);
     }
 
-    function fillMethod(inputEl, rule) {
+    // 填入規則資料 (工法、備註、單位)
+    function fillMethod(methodEl, rule) {
         if (!rule) return;
+        isUpdating = true;
 
         // 1. 填入工法
-        if (inputEl.value !== rule.method) {
-            inputEl.value = rule.method;
-            inputEl.dispatchEvent(new Event('change', { bubbles: true }));
+        if (methodEl.value !== rule.method) {
+            methodEl.value = rule.method;
+            methodEl.dispatchEvent(new Event('change', { bubbles: true }));
         }
 
-        // 2. 填入備註
-        if (rule.autoRemark) {
-            let remarkEl = document.querySelector(SELECTORS.REMARK);
-            if (remarkEl && !remarkEl.value.includes(rule.autoRemark)) {
-                let currentVal = remarkEl.value.trim();
-                remarkEl.value = currentVal ? currentVal + '\n' + rule.autoRemark : rule.autoRemark;
+        // 2. 填入備註 (優化：切換時自動清理舊的自動備註)
+        let remarkEl = document.querySelector(SELECTORS.REMARK);
+        if (remarkEl) {
+            let currentVal = remarkEl.value;
+
+            // 先清除所有 RULES 中定義過的 autoRemark，避免疊加
+            RULES.forEach(r => {
+                if (r.autoRemark && currentVal.includes(r.autoRemark)) {
+                    currentVal = currentVal.replace(r.autoRemark, '');
+                }
+            });
+
+            // 清理多餘的空白行與首尾空白
+            currentVal = currentVal.replace(/^\s*[\r\n]/gm, '').trim();
+
+            // 如果目前選取的規則有專屬 autoRemark，則加到最下方
+            if (rule.autoRemark) {
+                currentVal = currentVal ? currentVal + '\n' + rule.autoRemark : rule.autoRemark;
+            }
+
+            // 如果內容有變動，才重新賦值並觸發事件
+            if (remarkEl.value !== currentVal) {
+                remarkEl.value = currentVal;
                 remarkEl.dispatchEvent(new Event('change', { bubbles: true }));
-                lastKnownValues.REMARK = remarkEl.value;
             }
         }
 
@@ -433,28 +233,90 @@
             let unitEl = document.querySelector(SELECTORS.UNIT);
             if (unitEl) {
                 if (unitEl.tagName === 'SELECT') {
-                    let options = Array.from(unitEl.options);
-                    let targetOption = options.find(opt => opt.text === rule.unit || opt.value === rule.unit);
+                    let targetOption = Array.from(unitEl.options).find(opt => opt.text === rule.unit || opt.value === rule.unit);
                     if (targetOption && unitEl.value !== targetOption.value) {
                         unitEl.value = targetOption.value;
                         unitEl.dispatchEvent(new Event('change', { bubbles: true }));
                     }
-                } else {
-                    if (unitEl.value !== rule.unit) {
-                        unitEl.value = rule.unit;
-                        unitEl.dispatchEvent(new Event('change', { bubbles: true }));
-                    }
+                } else if (unitEl.value !== rule.unit) {
+                    unitEl.value = rule.unit;
+                    unitEl.dispatchEvent(new Event('change', { bubbles: true }));
                 }
             }
         }
 
         calculateCost();
+        setTimeout(() => { isUpdating = false; }, 50);
     }
 
-    if (document.readyState === 'complete') {
+    // 主邏輯分配器
+    function processAllLogic(targetEl) {
+        if (isUpdating) return;
+
+        // 1. 處理構件變更 (產生方向備註按鈕)
+        if (targetEl.matches(SELECTORS.COMP)) {
+            updateCompButtons(getElementTextValue(targetEl));
+        }
+
+        // 2. 處理劣化類型變更 (推薦工法按鈕)
+        if (targetEl.matches(SELECTORS.DEFECT) || targetEl.matches(SELECTORS.DEFECT_TEXT)) {
+            let defectText = getElementTextValue(targetEl);
+            if (defectText) {
+                let matchedRules = RULES.filter(rule =>
+                    defectText.includes(rule.defect) || defectText.includes(rule.keyword) || rule.groups.some(g => defectText.includes(g))
+                );
+
+                let methodEl = document.querySelector(SELECTORS.METHOD);
+                if (methodEl) {
+                    if (matchedRules.length === 1) {
+                        let oldContainer = document.querySelector('.tm-btn-container');
+                        if (oldContainer) oldContainer.remove();
+                        fillMethod(methodEl, matchedRules[0]);
+                    } else if (matchedRules.length > 1) {
+                        createShortcutButtons(methodEl, matchedRules);
+                    } else {
+                        let oldContainer = document.querySelector('.tm-btn-container');
+                        if (oldContainer) oldContainer.remove();
+                    }
+                }
+            }
+        }
+
+        // 3. 處理數量與工法變更 (重新計算經費)
+        if (targetEl.matches(SELECTORS.QTY) || targetEl.matches(SELECTORS.METHOD)) {
+            calculateCost();
+        }
+    }
+
+    // 初始化事件監聽
+    function initScript() {
+        function handleEvent(e) {
+            let target = e.target;
+            if (!target || typeof target.matches !== 'function') return;
+
+            // 確認目標是否在監聽範圍內
+            const isTargetField = Object.values(SELECTORS).some(selector => target.matches(selector));
+            if (!isTargetField) return;
+
+            clearTimeout(inputTimeout);
+            inputTimeout = setTimeout(() => processAllLogic(target), 300);
+        }
+
+        // 使用 Event Delegation，統一在 body 攔截事件，取代原本的 setInterval 掃描
+        document.body.addEventListener('input', handleEvent);
+        document.body.addEventListener('change', handleEvent);
+
+        // 初始載入時，若已有預設值則先觸發一次按鈕生成
+        let compEl = document.querySelector(SELECTORS.COMP);
+        if (compEl && getElementTextValue(compEl)) {
+            updateCompButtons(getElementTextValue(compEl));
+        }
+    }
+
+    if (document.readyState === 'complete' || document.readyState === 'interactive') {
         initScript();
     } else {
-        window.addEventListener('load', initScript);
+        window.addEventListener('DOMContentLoaded', initScript);
     }
 
 })();
