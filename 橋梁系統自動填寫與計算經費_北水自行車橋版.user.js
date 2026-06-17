@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         橋梁系統自動填寫與計算經費_北水自行車橋版
 // @namespace    http://tampermonkey.net/
-// @version      0.7.6
+// @version      0.8.0
 // @description  自動補齊名稱、填寫工法、並自動填入單價
 // @match        *://bms2.iot.gov.tw/*
 // @run-at       document-idle
@@ -14,7 +14,7 @@
 (function() {
     'use strict';
 
-    console.log('[橋梁外掛] ⏳ 腳本 v0.7.6 載入完成...');
+    console.log('[橋梁外掛] ⏳ 腳本 v0.8.0 載入完成...');
 
     // 🌟 修改點 1：移除數量與總價，改為單價(PRICE)
     const SELECTORS = {
@@ -49,7 +49,10 @@
         { defect: '防止落橋裝置損傷', groups: ['防落', '防落橋裝置損傷'], keyword: '防落損傷U≧3', method: '混凝土止震塊修復', price: 2700 },
         { defect: '防落墊老化', groups: ['防落墊', '防落墊老化'], keyword: '防落墊老化', method: '持續觀察', price: 0 },
         { defect: '塗裝劣化、生銹或腐蝕', groups: ['塗裝劣化', '生銹或腐蝕'], keyword: '塗劣', method: '鋼構除鏽及油漆塗裝', price: 540 },
-        { defect: '生銹或腐蝕', groups: ['生銹或腐蝕'], keyword: '防蝕保護', method: '金屬欄杆的防蝕保護', price: 540 },
+        { defect: '生銹或腐蝕', groups: ['生銹或腐蝕'], keyword: '防蝕保護', method: '金屬欄杆的防蝕保護', price: 540 },        
+        { defect: '護欄高度不足', groups: ['高度不足','護欄高度不足'], keyword: '護欄加高', method: '護欄加高', price: 2700 },
+        { defect: '動物巢穴', groups: ['動物巢穴','生物巢穴','動物','生物','鳥巢','巢穴'], keyword: '清除雜物', method: '清除雜物', price: 2160 },
+        { defect: '排水設施阻塞或功能性降低', groups: ['排水阻塞','排水設施阻塞'], keyword: '清理排水孔', method: '清理排水孔', price: 2160 },
 
     ];
 
