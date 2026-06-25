@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         人行橋系統填寫
 // @namespace    http://tampermonkey.net/
-// @version      3.9.1
+// @version      3.9.2
 // @description  自動抓取 PBMIS 系統欄位並反填。純 ID 抓取、防呆比對、U值連動、跨頁面智慧日期記憶。
 // @author       You
 // @match        *://pbmis.nlma.gov.tw/*
