@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         人行橋系統填寫
+// @name         橋梁系統自動反向填寫_人行橋系統版
 // @namespace    http://tampermonkey.net/
 // @version      3.9
 // @description  自動抓取 PBMIS 系統欄位並反填。純 ID 抓取、防呆比對、U值連動、跨頁面智慧日期記憶。
@@ -7,8 +7,8 @@
 // @match        *://pbmis.nlma.gov.tw/*
 // @icon         data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==
 // @grant        none
-// @downloadURL  https://raw.githubusercontent.com/lin3274/Bridge-Inspection/refs/heads/main/人行橋系統填寫.user.js
-// @updateURL    https://raw.githubusercontent.com/lin3274/Bridge-Inspection/refs/heads/main/人行橋系統填寫.user.js
+// @downloadURL  https://raw.githubusercontent.com/lin3274/Bridge-Inspection/refs/heads/main/橋梁系統自動反向填寫_人行橋系統版.user.js
+// @updateURL    https://raw.githubusercontent.com/lin3274/Bridge-Inspection/refs/heads/main/橋梁系統自動反向填寫_人行橋系統版.user.js
 // @license     MIT
 // ==/UserScript==
 console.log('🚀 [PBMIS] 腳本v3.9載入');
