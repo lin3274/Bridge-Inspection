@@ -58,7 +58,10 @@ console.log('🚀 [PBMIS] 腳本v3.9.1載入');
             .replace(/[（）()【】\[\]]/g, '')    // 移除所有種類的括號
             .replace(/樑/g, '梁')              // 統一異體字：樑 -> 梁
             .replace(/臺/g, '台')              // 統一異體字：臺 -> 台
-            .replace(/[、/\\_,-^]/g, '');       // 移除斜線、頓號等干擾符號
+            .replace(/²/g, '2')                // 防呆：將平方符號 ² 轉換為 2
+            .replace(/³/g, '3')                // 防呆：將立方符號 ³ 轉換為 3
+            .replace(/\^/g, '')                // 【重點修改】獨立把 ^ 符號拔掉，讓 M^2 變成 M2
+            .replace(/[、/\\_,-]/g, '');       // 移除斜線、頓號等干擾符號
     }
 
     function getSelectText(selector) {
@@ -426,7 +429,7 @@ console.log('🚀 [PBMIS] 腳本v3.9.1載入');
 
             const numberMatch = qtyUnitStr.match(/^[0-9.]+/);
             const qty = numberMatch ? numberMatch[0] : '';
-            const unit = qtyUnitStr.replace(/^[0-9.]+/g, '').trim();
+            const unit = qtyUnitStr.replace(/^[0-9.]+/, '').trim();
 
             setInputValue(CONFIG.quantity, qty);
             setSelectByText(CONFIG.unit, unit);
